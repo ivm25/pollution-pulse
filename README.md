@@ -1,6 +1,6 @@
 # pollution-pulse
 
-# NSW Air Pollution Analysis and Forecasting
+# Air Pollution Analysis and Forecasting
 
 ## Project Overview
 This project aims to analyze and forecast air pollution levels in New South Wales (NSW) using Python for data analysis and Python Shiny for creating an interactive user interface. The project will utilize `sktime` and `pytimetk` for time series forecasting and machine learning in the near future.

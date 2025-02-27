@@ -7,16 +7,13 @@ import plotly
 import os
 
 
-analysis_data = pd.read_csv('HistoricalObs.csv', 
-                   encoding = 'unicode_escape')
-
-analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
 
 
-def summary_by_time(df, key):
+
+def summary_by_time(df, key1,key2):
 
     data_by_category = df\
-                    .groupby([key])\
+                    .groupby([key1,key2])\
                     .summarize_by_time(
                         date_column = 'Date',
                         value_column = 'Value',

@@ -131,7 +131,10 @@ app_ui = ui.page_fluid(
                                          ui.card(output_widget("line_plot_comparative"),full_screen=True)),col_widths=[4,8]) 
                                                 )
                              )
-                                 ), theme = shinyswatch.theme.minty(),
+                                 )
+                                #  ,ui.navset_pill(ui.nav_panel("ANomaly Detection"))
+                                 ,
+                                   theme = shinyswatch.theme.minty(),
                       )
  
 
@@ -313,6 +316,7 @@ def server(input, output, session: Session):
     def insights_1():
 
         d = summary_data[summary_data['Site_Id'] == input.var()]
+        d = d[d['Parameter_ParameterDescription'] == input.pollutant()]
 
         if input.time() == "This Quarter":
            
@@ -344,6 +348,7 @@ def server(input, output, session: Session):
             return render.DataTable(response_output_df,
                                     editable = True,
                                     width = "700px",
+                                    
                                     
                                     )
         
@@ -384,6 +389,8 @@ def server(input, output, session: Session):
             d = d[(d['Date']> this_year_start)
                              & (d['Date'] < today)]
             
+            
+            
             # Create an agent that can interact with the Pandas DataFrame
             data_analysis_agent = create_pandas_dataframe_agent(
                 llm, 
@@ -416,6 +423,8 @@ def server(input, output, session: Session):
     def insights_2():
 
         d = summary_data[summary_data['Site_Id'] == input.var()]
+
+        d = d[d['Parameter_ParameterDescription'] == input.pollutant()]
 
         if input.time_comparative() == "Last Quarter":
            

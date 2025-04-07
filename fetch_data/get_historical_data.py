@@ -38,7 +38,7 @@ class aqms_api_class(object):
         ObsRequest['Parameters'] = ['PM10','PM2.5']
         ObsRequest['Sites'] = [336,4330,2330, 7330,3330,329,5330]
         StartDate = dt.date(2021,11,25)
-        EndDate = dt.date(2025,2,18)
+        EndDate = dt.date(2025,3,7)
         ObsRequest['StartDate'] = StartDate.strftime('%Y-%m-%d')
         ObsRequest['EndDate'] = EndDate.strftime('%Y-%m-%d')
         ObsRequest['Categories'] = ['Averages']

@@ -14,8 +14,10 @@ from plotnine.geoms import geom_col, geom_line
 from plotnine.geoms.geom_point import geom_point
 from plotnine.geoms.geom_smooth import geom_smooth
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.callbacks import Points
 
-from data_manipulation.data_wrangling import summary_by_time
+from data_manipulation.data_wrangling import summary_by_time, summary_by_time_weekly, anamoly_detection
 from datetime import datetime, timedelta
 
 import langchain
@@ -36,6 +38,13 @@ analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
 
 summary_data = summary_by_time(analysis_data,
                                'Site_Id','Parameter_ParameterDescription')
+
+
+summary_data_weekly = summary_by_time_weekly(analysis_data,
+                               'Site_Id','Parameter_ParameterDescription')
+
+anomaly_data = anamoly_detection(summary_data_weekly, 
+                                'Site_Id','Parameter_ParameterDescription')
 
 summary_data['Site_Id'] = summary_data['Site_Id'].astype(str)
 
@@ -72,12 +81,16 @@ last_year_start = datetime(last_year, 1, 1)
 
 # OPENAI SETUP
 model = 'gpt-4o-mini'
+
 # Initialize the LLM
 llm = ChatOpenAI(
     model_name=model,
     temperature=0,
     api_key =  os.getenv("OPENAI_API_KEY")
 )
+
+
+
 
 #--------------------------------------------------------------
 
@@ -107,7 +120,15 @@ app_ui = ui.page_fluid(
                                            
                                              ui.layout_columns(
                                                              
-                                                                ui.output_data_frame("insights_1"),
+                                                                ui.row(ui.output_data_frame("insights_1"),
+                                                                       ui.card(
+                                                                                ui.card_header("Pinned Data Point"),
+                                                                                ui.output_text("click_date"),
+                                                                                ui.h3(ui.output_text("click_value")),
+                                                                                ui.output_ui("additional_info"),
+                                                                                style="height: 200px; background-color: #f8f9fa;"
+                                                                            )
+                                                                                        ),
                                                                        
                                                                
                                                                 ui.row(ui.input_radio_buttons("time",
@@ -131,8 +152,23 @@ app_ui = ui.page_fluid(
                                          ui.card(output_widget("line_plot_comparative"),full_screen=True)),col_widths=[4,8]) 
                                                 )
                              )
-                                 )
-                                #  ,ui.navset_pill(ui.nav_panel("ANomaly Detection"))
+                                  ,ui.nav_panel("Anomaly Detection",
+                                                ui.layout_sidebar(
+                                                    ui.sidebar(ui.input_radio_buttons(
+                                                                "var_2", 
+                                                                "Select a Site ID",
+                                                                choices= list(summary_data['Site_Id']),
+                                                                selected = '329',
+                                                                                        ),
+                                                                ui.input_radio_buttons(
+                                                                "pollutant_anomaly", 
+                                                                "Select a pollutant",
+                                                                choices= list(summary_data['Parameter_ParameterDescription']),
+                                                                selected = 'PM10',
+                                                                    )    ),
+                                                    output_widget("anomaly_plot")
+                                                )))
+                                  
                                  ,
                                    theme = shinyswatch.theme.minty(),
                       )
@@ -142,6 +178,13 @@ app_ui = ui.page_fluid(
 # Server function provides access to client-side input values
 def server(input, output, session: Session):
 
+    click_reactive = reactive.value() 
+    hover_reactive = reactive.value() 
+    selection_reactive = reactive.value() 
+
+    # Store the current filtered dataset in a reactive value
+    current_dataset = reactive.value(pd.DataFrame())
+
     @render_widget  
     def line_plot():
         
@@ -150,12 +193,17 @@ def server(input, output, session: Session):
 
         d = d[d['Parameter_ParameterDescription'] == input.pollutant()]
 
+        filtered_data = None
+
         if input.time() == "This Quarter":
            
-            d = d[(d['Date']> thirteen_weeks_ago)
+            filtered_data = d[(d['Date']> thirteen_weeks_ago)
                              & (d['Date'] < today)]
             
-            pollution_plot = px.area(data_frame=d,
+            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+
+
+            pollution_plot = px.area(data_frame=filtered_data,
                                         x="Date",
                                             y="PM 10",
                                             markers = True,
@@ -176,11 +224,12 @@ def server(input, output, session: Session):
         
         if input.time() == "Last 52 Weeks":
            
-            d = d[(d['Date']> year_ago)
+            filtered_data = d[(d['Date']> year_ago)
                              & (d['Date'] < today)]
             
-            
-            pollution_plot = px.area(data_frame=d,
+            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+
+            pollution_plot = px.area(data_frame=filtered_data,
                                         x="Date",
                                             y="PM 10",
                                             markers = True,
@@ -200,10 +249,11 @@ def server(input, output, session: Session):
             
         if input.time() == "Year to date":
           
-            d = d[(d['Date']> this_year_start)
+            filtered_data = d[(d['Date']> this_year_start)
                              & (d['Date'] < today)]
             
-            
+            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+
             pollution_plot = px.area(data_frame=d,
                                         x="Date",
                                             y="PM 10",
@@ -221,9 +271,76 @@ def server(input, output, session: Session):
                                          title_font_color='#118DFF',
                                          title = {'x':0.5,
                                                   'xanchor':'center'})
+            
 
-        return pollution_plot
+        # Store the current dataset for use in other functions
+        current_dataset.set(filtered_data)
+        w = go.FigureWidget(pollution_plot.data, pollution_plot.layout) 
+        w.data[0].on_click(on_point_click) 
+        w.data[0].on_hover(on_point_hover) 
+        w.data[0].on_selection(on_point_selection) 
+        return w 
+
+
+        # return pollution_plot
     
+
+    def on_point_click(trace, points, state): 
+        click_reactive.set(points) 
+
+    def on_point_hover(trace, points, state): 
+        hover_reactive.set(points) 
+
+    def on_point_selection(trace, points, state): 
+        selection_reactive.set(points)
+
+
+    @render.text
+    def click_date():
+        points_data = click_reactive.get()
+        if points_data and hasattr(points_data, 'xs') and len(points_data.xs) > 0:
+            return f"Date: {points_data.xs[0]}"
+        return "Click a point to pin"
+    
+    @render.text
+    def click_value():
+        points_data = click_reactive.get()
+        if points_data and hasattr(points_data, 'ys') and len(points_data.ys) > 0:
+            return f"{points_data.ys[0]:.2f}"
+        return "No data pinned"
+
+    @render.ui
+    def additional_info():
+        points_data = click_reactive.get()
+        if points_data and hasattr(points_data, 'xs') and len(points_data.xs) > 0:
+            date_str = points_data.xs[0]
+            df = current_dataset.get()
+            
+            # Find the row that matches the clicked date
+            if not df.empty and date_str in df['Date'].values:
+                row = df[df['Date'] == date_str].iloc[0]
+                
+                # Extract additional variables you want to display
+                # For example, assuming there are columns like 'Value_min', 'Value_max' in your dataset
+                additional_cols = []
+                for col in df.columns:
+                    if col not in ['Date',
+                                    'PM 10',
+                                      'Site_Id',
+                                        'Parameter_ParameterDescription']:
+                        additional_cols.append(col)
+                
+                # Create HTML with additional information
+                info_html = "<div style='font-size: 0.8em; color: #666;'>"
+                for col in additional_cols[:3]:  # Limit to first 3 additional columns
+                    if col in row:
+                        info_html += f"<div><strong>{col}:</strong> {row[col]}</div>"
+                info_html += "</div>"
+                
+                return ui.HTML(info_html)
+        
+        return ui.HTML("<div>Click a point to see more details</div>")
+
     @render_widget  
     def line_plot_comparative():
         
@@ -237,6 +354,8 @@ def server(input, output, session: Session):
             d = d[(d['Date']> thirteen_weeks_ago_last_year)
                              & (d['Date'] < year_ago)]
             
+            d["Date"] = d["Date"].dt.strftime('%Y-%m-%d')
+
             pollution_plot = px.area(data_frame=d,
                                         x="Date",
                                             y="PM 10",
@@ -262,6 +381,8 @@ def server(input, output, session: Session):
             d = d[(d['Date']> two_years_ago)
                              & (d['Date'] < year_ago)]
             
+            d["Date"] = d["Date"].dt.strftime('%Y-%m-%d')
+
             pollution_plot = px.area(data_frame=d,
                                         x="Date",
                                             y="PM 10",
@@ -288,6 +409,8 @@ def server(input, output, session: Session):
             d = d[(d['Date']> last_year_start)
                              & (d['Date'] < year_ago)]
             
+            d["Date"] = d["Date"].dt.strftime('%Y-%m-%d')
+
             pollution_plot = px.area(data_frame=d,
                                         x="Date",
                                             y="PM 10",
@@ -519,6 +642,24 @@ def server(input, output, session: Session):
                                     width = "700px",
                                    )
         
+    @render_widget
+    def anomaly_plot():
+        
+        # anomaly_data_filtered = anomaly_data[anomaly_data['Site_Id'] == input.var_2()]
+
+        anomaly_data_filtered = anomaly_data[anomaly_data['Parameter_ParameterDescription'] == input.pollutant_anomaly()]
+        fig =  anomaly_data_filtered \
+                .groupby(["Site_Id"]) \
+                .plot_anomalies(
+                    date_column = "Date", 
+                    facet_ncol = 2, 
+                    width = 2000,
+                    height = 1000,
+                  
+                  
+                )
+        
+        return fig
 
     
 app = App(app_ui, server)

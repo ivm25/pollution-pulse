@@ -25,6 +25,9 @@ wcwidth
 webencodings
 websockets
 widgetsnbextension
+rsconnect-python
+
+
 
 gunicorn
 shinyswatch

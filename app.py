@@ -29,7 +29,7 @@ import json
 from pandas import json_normalize
 import re
 import os
-
+from uuid import uuid4
 
 analysis_data = pd.read_csv('HistoricalObs.csv', 
                    encoding = 'unicode_escape')
@@ -91,14 +91,13 @@ llm = ChatOpenAI(
 
 
 
-
 #--------------------------------------------------------------
 
 
 
 
 app_ui = ui.page_fluid(
-    
+        #  ui.tags.style(HTML(custom_css)),
             # ui.tags.style(HTML(custom_css)),
              ui.page_navbar(title = "Pollution Pulse"),
              ui.navset_pill(
@@ -121,13 +120,13 @@ app_ui = ui.page_fluid(
                                              ui.layout_columns(
                                                              
                                                                 ui.row(ui.output_data_frame("insights_1"),
-                                                                       ui.card(
-                                                                                ui.card_header("Pinned Data Point"),
-                                                                                ui.output_text("click_date"),
-                                                                                ui.h3(ui.output_text("click_value")),
-                                                                                ui.output_ui("additional_info"),
-                                                                                style="height: 200px; background-color: #f8f9fa;"
-                                                                            )
+                                                                    #    ui.card(
+                                                                    #             ui.card_header("Pinned Data Point"),
+                                                                    #             ui.output_text("click_date"),
+                                                                    #             ui.h3(ui.output_text("click_value")),
+                                                                    #             ui.output_ui("additional_info"),
+                                                                    #             style="height: 200px; background-color: #f8f9fa;"
+                                                                    #         )
                                                                                         ),
                                                                        
                                                                
@@ -138,7 +137,18 @@ app_ui = ui.page_fluid(
                                                                            "Year to date"],
                                                                            selected='This Quarter',
                                                                            inline=True),
-                                         ui.card(output_widget("line_plot"),full_screen=True)), col_widths=[4,8]),
+                                                                ui.card(output_widget("line_plot"),
+                                                                        full_screen=True)
+                                                                #                     ui.div(
+                                                                #     {"class": "plot-container"},
+                                                                #     output_widget("line_plot"),
+                                                                #     ui.output_ui("pinned_points_output")
+                                                                # )
+                                                                        ),
+                                                                         ui.input_action_button("clear_lines",
+                                                                                                "Clear Data"),
+                                                                          col_widths=[4,7,1],
+                                                                         ),
                                          ui.layout_columns(
                                                                     
                                                                  ui.output_data_frame("insights_2"),
@@ -177,6 +187,8 @@ app_ui = ui.page_fluid(
 
 # Server function provides access to client-side input values
 def server(input, output, session: Session):
+    # Store multiple pinned points with positions
+    # pinned_points = reactive.value([])
 
     click_reactive = reactive.value() 
     hover_reactive = reactive.value() 
@@ -185,104 +197,322 @@ def server(input, output, session: Session):
     # Store the current filtered dataset in a reactive value
     current_dataset = reactive.value(pd.DataFrame())
 
-    @render_widget  
-    def line_plot():
+    
+    points_store = reactive.value([])
+    plot_counter = reactive.value(0)
+
+    def create_plot(f):
+
+  
+        fig  = go.Figure()
+
+        fig.add_trace(go.Scatter(
+             x = f['Date'],
+             y = f['PM 10'],
+             fill = 'tozeroy',
+             mode = 'none',
+             name = 'PM 10',
+             fillcolor= '#118DFF',
+             hoverinfo='x+y'
+        ))
+
+        y_min_primary = f['PM 10'].min() -2
+        y_max_primary = f['PM 10'].max() + 2
+
+        for i, point in enumerate(points_store()):
+            date_val, y1_val = point
+            color = f'hsl({(i * 60) % 360}, 70%, 50%)'
+
+            #Add vertical line at the date value
+            fig.add_trace(go.Scatter(
+                x = [date_val,date_val],
+                y = [y_min_primary,y_max_primary],
+                mode = 'lines',
+                line = dict(color = 'blue',
+                            width = 2,
+                            dash = 'solid',
+                           
+                            ),  
+                            showlegend = False
+
+
+                                    )
+                                    )
+            
+
+
         
-        # d = summary_data
+            annotation_text = (
+                f"Date: {date_val}<br>"
+                f"Pollutant value: {y1_val}<br>"
+            )
+
+
+            fig.add_annotation(
+                x = date_val,
+                y = y1_val + 5,
+                xref = "x",
+                yref="y",
+                text = annotation_text,
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor='black',
+                bgcolor='white',
+                bordercolor='red',
+
+            )
+
+
+        # Update marker styles
+        fig.update_layout(
+                            
+                           
+                                        template = 'plotly_white'
+                                        )
+        fig.update_layout(title_font_family="Times New Roman",
+                                        title_font_color='#118DFF',
+                                        title = {'x':0.5,
+                                                'xanchor':'center'})
+    
+
+     
+
+        return fig
+
+
+    @render_widget
+    def line_plot():
+
+        plot_counter()
+
         d = summary_data[summary_data['Site_Id'] == input.var()]
 
         d = d[d['Parameter_ParameterDescription'] == input.pollutant()]
 
-        filtered_data = None
-
-        if input.time() == "This Quarter":
-           
-            filtered_data = d[(d['Date']> thirteen_weeks_ago)
-                             & (d['Date'] < today)]
-            
-            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
-
-
-            pollution_plot = px.area(data_frame=filtered_data,
-                                        x="Date",
-                                            y="PM 10",
-                                            markers = True,
-                                           color_discrete_sequence=['#118DFF'],
-                                           template='plotly_white',
-                                           title = f"Analysing this quarter: {thirteen_weeks_ago.date()} to {today.date()}"
-                                            )
-            
-            # Update marker styles
-            pollution_plot.update_traces(mode='lines+markers',
-                                          marker=dict(size=6, symbol='diamond', 
-                                         color='black'))
-            pollution_plot.update_layout(title_font_family="Times New Roman",
-                                         title_font_color='#118DFF',
-                                         title = {'x':0.5,
-                                                  'xanchor':'center'})
-      
         
-        if input.time() == "Last 52 Weeks":
-           
-            filtered_data = d[(d['Date']> year_ago)
-                             & (d['Date'] < today)]
+
+        if input.time() == 'This Quarter':
+          
+            filtered_data = d[(d['Date']> this_year_start)
+                                & (d['Date'] < today)]
             
             filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
 
-            pollution_plot = px.area(data_frame=filtered_data,
-                                        x="Date",
-                                            y="PM 10",
-                                            markers = True,
-                                           color_discrete_sequence=['#118DFF'],
-                                           template='plotly_white',
-                                           title = f"Analysing the last 52 weeks:{year_ago.date()} to {today.date()}")
-            
-            # Update marker styles
-            pollution_plot.update_traces(mode='lines+markers',
-                                          marker=dict(size=6, symbol='diamond', 
-                                         color='black'))
-            
-            pollution_plot.update_layout(title_font_family="Times New Roman",
-                                         title_font_color='#118DFF',
-                                         title = {'x':0.5,
-                                                  'xanchor':'center'})
-            
-        if input.time() == "Year to date":
+
+            fig = create_plot(filtered_data)
+
+            widget = go.FigureWidget(fig)
+
+
+            def handle_click(trace, points, selector):
+
+                if len(points.point_inds)>0:
+                    idx = points.point_inds[0]
+                    date_val = filtered_data['Date'].iloc[idx]
+
+                    y1_val = filtered_data['PM 10'].iloc[idx]
+
+                    # update the reactive value with the new point
+
+                    current_points = points_store()
+
+                    current_points.append((date_val,
+                                        y1_val))
+                    
+                    points_store.set(current_points)
+
+                    # Force a redraw by increneting the counter
+
+                    plot_counter.set(plot_counter() + 1)
+
+            widget.data[0].on_click(handle_click)
+
+            return widget
+        
+        if input.time() == 'Last 52 Weeks':
           
+            filtered_data = d[(d['Date']> year_ago)
+                                & (d['Date'] < today)]
+            
+            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+
+
+            fig = create_plot(filtered_data)
+
+            widget = go.FigureWidget(fig)
+
+
+            def handle_click(trace, points, selector):
+
+                if len(points.point_inds)>0:
+                    idx = points.point_inds[0]
+                    date_val = filtered_data['Date'].iloc[idx]
+
+                    y1_val = filtered_data['PM 10'].iloc[idx]
+
+                    # update the reactive value with the new point
+
+                    current_points = points_store()
+
+                    current_points.append((date_val,
+                                        y1_val))
+                    
+                    points_store.set(current_points)
+
+                    # Force a redraw by increneting the counter
+
+                    plot_counter.set(plot_counter() + 1)
+
+            widget.data[0].on_click(handle_click)
+
+            return widget
+        
+        if input.time() == 'Year to date':
+
             filtered_data = d[(d['Date']> this_year_start)
                              & (d['Date'] < today)]
             
             filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
 
-            pollution_plot = px.area(data_frame=d,
-                                        x="Date",
-                                            y="PM 10",
-                                            markers = True,
-                                           color_discrete_sequence=['#118DFF'],
-                                           template='plotly_white',
-                                           title = f"Analysing year to date: {this_year_start.date()} to {today.date()}")
             
-            # Update marker styles
-            pollution_plot.update_traces(mode='lines+markers',
-                                          marker=dict(size=6, symbol='diamond', 
-                                         color='black'))
-            
-            pollution_plot.update_layout(title_font_family="Times New Roman",
-                                         title_font_color='#118DFF',
-                                         title = {'x':0.5,
-                                                  'xanchor':'center'})
-            
+            fig = create_plot(filtered_data)
 
-        # Store the current dataset for use in other functions
-        current_dataset.set(filtered_data)
-        w = go.FigureWidget(pollution_plot.data, pollution_plot.layout) 
-        w.data[0].on_click(on_point_click) 
-        w.data[0].on_hover(on_point_hover) 
-        w.data[0].on_selection(on_point_selection) 
-        return w 
+            widget = go.FigureWidget(fig)
 
 
-        # return pollution_plot
+            def handle_click(trace, points, selector):
+
+                if len(points.point_inds)>0:
+                    idx = points.point_inds[0]
+                    date_val = filtered_data['Date'].iloc[idx]
+
+                    y1_val = filtered_data['PM 10'].iloc[idx]
+
+                    # update the reactive value with the new point
+
+                    current_points = points_store()
+
+                    current_points.append((date_val,
+                                        y1_val))
+                    
+                    points_store.set(current_points)
+
+                    # Force a redraw by increneting the counter
+
+                    plot_counter.set(plot_counter() + 1)
+
+            widget.data[0].on_click(handle_click)
+
+            return widget
+     
+
+    @reactive.effect
+    @reactive.event(input.clear_lines)
+    def clear_reference_lines():
+
+        points_store.set([])
+
+        plot_counter.set(plot_counter() + 1)
+
+
+    # @render_widget  
+    # def line_plot():
+        
+    #     # d = summary_data
+    #     d = summary_data[summary_data['Site_Id'] == input.var()]
+
+    #     d = d[d['Parameter_ParameterDescription'] == input.pollutant()]
+
+    #     filtered_data = None
+
+    #     if input.time() == "This Quarter":
+           
+    #         filtered_data = d[(d['Date']> thirteen_weeks_ago)
+    #                          & (d['Date'] < today)]
+            
+    #         filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+
+
+    #         pollution_plot = px.area(data_frame=filtered_data,
+    #                                     x="Date",
+    #                                         y="PM 10",
+    #                                         markers = True,
+    #                                        color_discrete_sequence=['#118DFF'],
+    #                                        template='plotly_white',
+    #                                        title = f"Analysing this quarter: {thirteen_weeks_ago.date()} to {today.date()}"
+    #                                         )
+            
+    #         # Update marker styles
+    #         pollution_plot.update_traces(mode='lines+markers',
+    #                                       marker=dict(size=6, symbol='diamond', 
+    #                                      color='black'))
+    #         pollution_plot.update_layout(title_font_family="Times New Roman",
+    #                                      title_font_color='#118DFF',
+    #                                      title = {'x':0.5,
+    #                                               'xanchor':'center'})
+      
+        
+    #     if input.time() == "Last 52 Weeks":
+           
+    #         filtered_data = d[(d['Date']> year_ago)
+    #                          & (d['Date'] < today)]
+            
+    #         filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+
+    #         pollution_plot = px.area(data_frame=filtered_data,
+    #                                     x="Date",
+    #                                         y="PM 10",
+    #                                         markers = True,
+    #                                        color_discrete_sequence=['#118DFF'],
+    #                                        template='plotly_white',
+    #                                        title = f"Analysing the last 52 weeks:{year_ago.date()} to {today.date()}")
+            
+    #         # Update marker styles
+    #         pollution_plot.update_traces(mode='lines+markers',
+    #                                       marker=dict(size=6, symbol='diamond', 
+    #                                      color='black'))
+            
+    #         pollution_plot.update_layout(title_font_family="Times New Roman",
+    #                                      title_font_color='#118DFF',
+    #                                      title = {'x':0.5,
+    #                                               'xanchor':'center'})
+            
+    #     if input.time() == "Year to date":
+          
+    #         filtered_data = d[(d['Date']> this_year_start)
+    #                          & (d['Date'] < today)]
+            
+    #         filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+
+    #         pollution_plot = px.area(data_frame=d,
+    #                                     x="Date",
+    #                                         y="PM 10",
+    #                                         markers = True,
+    #                                        color_discrete_sequence=['#118DFF'],
+    #                                        template='plotly_white',
+    #                                        title = f"Analysing year to date: {this_year_start.date()} to {today.date()}")
+            
+    # #         # Update marker styles
+    #         pollution_plot.update_traces(mode='lines+markers',
+    #                                       marker=dict(size=6, symbol='diamond', 
+    #                                      color='black'))
+            
+    #         pollution_plot.update_layout(title_font_family="Times New Roman",
+    #                                      title_font_color='#118DFF',
+    #                                      title = {'x':0.5,
+    #                                               'xanchor':'center'})
+            
+
+    # #     # Store the current dataset for use in other functions
+    #     current_dataset.set(filtered_data)
+    #     w = go.FigureWidget(pollution_plot.data, pollution_plot.layout) 
+    #     w.data[0].on_click(on_point_click) 
+    #     w.data[0].on_hover(on_point_hover) 
+    #     w.data[0].on_selection(on_point_selection) 
+    #     # w.data[0].on_click(on_point_click_2) 
+    #     return w 
     
 
     def on_point_click(trace, points, state): 
@@ -293,6 +523,49 @@ def server(input, output, session: Session):
 
     def on_point_selection(trace, points, state): 
         selection_reactive.set(points)
+
+    # def on_point_click_2(trace, points, state): 
+    #     if not hasattr(points, 'point_inds') or not points.point_inds:
+    #         return
+        
+    #     # Get the index of the clicked point
+    #     point_idx = points.point_inds[0]
+        
+    #     # Get the corresponding data
+    #     df = current_dataset.get()
+    #     if df.empty or point_idx >= len(df):
+    #         return
+            
+    #     row = df.iloc[point_idx]
+        
+    #     # Create unique ID for this pin
+    #     point_id = str(uuid4())
+        
+    #     # Get pixel coordinates from the click event
+    #     # points.points_event contains the pixel coordinates
+    #     if not hasattr(points, 'points_event') or not points.points_event:
+    #         return
+            
+    #     click_x = points.points_event[0]['x']
+    #     click_y = points.points_event[0]['y']
+        
+    #     # Add to pinned points with position information
+    #     current_pins = pinned_points.get().copy()
+    #     current_pins.append({
+    #         'id': point_id,
+    #         'date': row['Date_str'],
+    #         'value': row['PM 10'],
+    #         'site': row['Site_Id'],
+    #         'parameter': row['Parameter_ParameterDescription'],
+    #         'x_pos': click_x,  # Store x position
+    #         'y_pos': click_y   # Store y position
+    #     })
+    #     pinned_points.set(current_pins)
+        
+    #     # Inform user of successful pin
+    #     session.notification_show("Point pinned!", 
+    #                              type="message",
+    #                              duration=3)
 
 
     @render.text
@@ -340,6 +613,51 @@ def server(input, output, session: Session):
                 return ui.HTML(info_html)
         
         return ui.HTML("<div>Click a point to see more details</div>")
+
+    # @render.ui
+    # def pinned_points_output():
+    #     points = pinned_points.get()
+    #     if not points:
+    #         return ui.div()
+        
+    #     cards = []
+    #     for point in points:
+    #         x_offset = 10  # pixels to right
+    #         y_offset = -100  # pixels above
+            
+            
+    #         # Position offset so card doesn't cover the point
+    #         x_offset = 10
+    #         y_offset = -100
+            
+    #         # Create positioned card
+    #          # Create a positioned card
+    #         card = ui.div(
+    #             {
+    #                 "class": "pin-card",
+    #                 "style": f"left: {point['x_pos'] + x_offset}px; top: {point['y_pos'] + y_offset}px;"
+    #             },
+    #             ui.div(
+    #                 {"class": "pin-header"},
+    #                 ui.strong(f"Date: {point['date']}"),
+    #                 ui.span(
+    #                     {"class": "close-btn", 
+    #                      "onclick": f"Shiny.setInputValue('remove_pin', '{point['id']}')"},
+    #                     "×"
+    #                 )
+    #             ),
+    #             ui.div(
+    #                 {"class": "pin-content"},
+    #                 ui.div(
+    #                     {"class": "pin-value"},
+    #                     f"Value: {point['value']:.2f}"
+    #                 ),
+    #                 ui.p(f"Site: {point['site']}"),
+    #                 ui.p(f"Parameter: {point['parameter']}")
+    #             )
+    #         )
+    #         cards.append(card)
+    #     return ui.div(*cards)
 
     @render_widget  
     def line_plot_comparative():

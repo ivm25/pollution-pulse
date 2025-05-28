@@ -91,6 +91,7 @@ llm = ChatOpenAI(
 
 
 
+
 #--------------------------------------------------------------
 
 
@@ -159,7 +160,11 @@ app_ui = ui.page_fluid(
                                                                            "Previous year to date"],
                                                                            selected = 'Last Quarter',
                                                                            inline=True),
-                                         ui.card(output_widget("line_plot_comparative"),full_screen=True)),col_widths=[4,8]) 
+                                         ui.card(output_widget("line_plot_comparative"),full_screen=True)),
+                                                                           ui.input_action_button("clear_lines_comparative",
+                                                                                                "Clear Data"),
+                                                                            col_widths=[4,7,1]
+                                                            ),
                                                 )
                              )
                                   ,ui.nav_panel("Anomaly Detection",
@@ -201,6 +206,9 @@ def server(input, output, session: Session):
     points_store = reactive.value([])
     plot_counter = reactive.value(0)
 
+    points_store_comparative = reactive.value([])
+    plot_counter_comparative = reactive.value(0)
+
     def create_plot(f):
 
   
@@ -209,10 +217,13 @@ def server(input, output, session: Session):
         fig.add_trace(go.Scatter(
              x = f['Date'],
              y = f['PM 10'],
+            
              fill = 'tozeroy',
-             mode = 'none',
-             name = 'PM 10',
-             fillcolor= '#118DFF',
+             mode = 'lines + markers',
+           
+             fillcolor= 'rgba(0, 0, 255, 0.5)',
+             line = dict(color = '#118DFF'),
+             showlegend = False,
              hoverinfo='x+y'
         ))
 
@@ -230,9 +241,10 @@ def server(input, output, session: Session):
                 mode = 'lines',
                 line = dict(color = 'blue',
                             width = 2,
-                            dash = 'solid',
-                           
-                            ),  
+                            dash = 'dash',
+                            
+                            ), 
+                         
                             showlegend = False
 
 
@@ -244,7 +256,92 @@ def server(input, output, session: Session):
         
             annotation_text = (
                 f"Date: {date_val}<br>"
-                f"Pollutant value: {y1_val}<br>"
+                f"Pollutant value: {round(y1_val,2)}<br>"
+            )
+
+
+            fig.add_annotation(
+                x = date_val,
+                y = y1_val + 5,
+                xref = "x",
+                yref="y",
+                text = annotation_text,
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor='black',
+                bgcolor='white',
+                bordercolor='red',
+
+            )
+
+
+        # Update marker styles
+        fig.update_layout(
+                           
+                           
+                            template = 'plotly_white'
+                                        )
+        fig.update_layout(title_font_family="Times New Roman",
+                                        title_font_color='#118DFF',
+                                        title = {'x':0.5,
+                                                'xanchor':'center'})
+    
+
+     
+
+        return fig
+
+
+
+    def create_comparative_plot(f):
+
+  
+        fig  = go.Figure()
+
+        fig.add_trace(go.Scatter(
+             x = f['Date'],
+             y = f['PM 10'],
+             fill = 'tozeroy',
+             mode = 'lines + markers',
+           
+             fillcolor= 'rgba(163, 221, 179, 0.5)',
+              line = dict(color = '#A3DDB3'),
+             showlegend = False,
+             hoverinfo='x+y'
+        ))
+
+        y_min_primary = f['PM 10'].min() -2
+        y_max_primary = f['PM 10'].max() + 2
+
+        for i, point in enumerate(points_store_comparative()):
+            date_val, y1_val = point
+            color = f'hsl({(i * 60) % 360}, 70%, 50%)'
+
+            #Add vertical line at the date value
+            fig.add_trace(go.Scatter(
+                x = [date_val,date_val],
+                y = [y_min_primary,y_max_primary],
+                mode = 'lines',
+                line = dict(color = 'green',
+                            width = 2,
+                            dash = 'dash',
+                            
+                            ), 
+                         
+                            showlegend = False
+
+
+                                    )
+                                    )
+            
+
+
+        
+            annotation_text = (
+                f"Date: {date_val}<br>"
+                f"Pollutant value: {round(y1_val,2)}<br>"
             )
 
 
@@ -272,7 +369,7 @@ def server(input, output, session: Session):
                                         template = 'plotly_white'
                                         )
         fig.update_layout(title_font_family="Times New Roman",
-                                        title_font_color='#118DFF',
+                                        title_font_color='#A3DDB3',
                                         title = {'x':0.5,
                                                 'xanchor':'center'})
     
@@ -344,7 +441,7 @@ def server(input, output, session: Session):
             widget = go.FigureWidget(fig)
 
 
-            def handle_click(trace, points, selector):
+            def handle_click_2(trace, points, selector):
 
                 if len(points.point_inds)>0:
                     idx = points.point_inds[0]
@@ -365,7 +462,7 @@ def server(input, output, session: Session):
 
                     plot_counter.set(plot_counter() + 1)
 
-            widget.data[0].on_click(handle_click)
+            widget.data[0].on_click(handle_click_2)
 
             return widget
         
@@ -382,7 +479,7 @@ def server(input, output, session: Session):
             widget = go.FigureWidget(fig)
 
 
-            def handle_click(trace, points, selector):
+            def handle_click_3(trace, points, selector):
 
                 if len(points.point_inds)>0:
                     idx = points.point_inds[0]
@@ -403,7 +500,7 @@ def server(input, output, session: Session):
 
                     plot_counter.set(plot_counter() + 1)
 
-            widget.data[0].on_click(handle_click)
+            widget.data[0].on_click(handle_click_3)
 
             return widget
      
@@ -416,103 +513,16 @@ def server(input, output, session: Session):
 
         plot_counter.set(plot_counter() + 1)
 
+    
+    @reactive.effect
+    @reactive.event(input.clear_lines_comparative)
+    def clear_reference_lines_comparative():
 
-    # @render_widget  
-    # def line_plot():
-        
-    #     # d = summary_data
-    #     d = summary_data[summary_data['Site_Id'] == input.var()]
+        points_store_comparative.set([])
 
-    #     d = d[d['Parameter_ParameterDescription'] == input.pollutant()]
-
-    #     filtered_data = None
-
-    #     if input.time() == "This Quarter":
-           
-    #         filtered_data = d[(d['Date']> thirteen_weeks_ago)
-    #                          & (d['Date'] < today)]
-            
-    #         filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
+        plot_counter_comparative.set(plot_counter_comparative() + 1)
 
 
-    #         pollution_plot = px.area(data_frame=filtered_data,
-    #                                     x="Date",
-    #                                         y="PM 10",
-    #                                         markers = True,
-    #                                        color_discrete_sequence=['#118DFF'],
-    #                                        template='plotly_white',
-    #                                        title = f"Analysing this quarter: {thirteen_weeks_ago.date()} to {today.date()}"
-    #                                         )
-            
-    #         # Update marker styles
-    #         pollution_plot.update_traces(mode='lines+markers',
-    #                                       marker=dict(size=6, symbol='diamond', 
-    #                                      color='black'))
-    #         pollution_plot.update_layout(title_font_family="Times New Roman",
-    #                                      title_font_color='#118DFF',
-    #                                      title = {'x':0.5,
-    #                                               'xanchor':'center'})
-      
-        
-    #     if input.time() == "Last 52 Weeks":
-           
-    #         filtered_data = d[(d['Date']> year_ago)
-    #                          & (d['Date'] < today)]
-            
-    #         filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
-
-    #         pollution_plot = px.area(data_frame=filtered_data,
-    #                                     x="Date",
-    #                                         y="PM 10",
-    #                                         markers = True,
-    #                                        color_discrete_sequence=['#118DFF'],
-    #                                        template='plotly_white',
-    #                                        title = f"Analysing the last 52 weeks:{year_ago.date()} to {today.date()}")
-            
-    #         # Update marker styles
-    #         pollution_plot.update_traces(mode='lines+markers',
-    #                                       marker=dict(size=6, symbol='diamond', 
-    #                                      color='black'))
-            
-    #         pollution_plot.update_layout(title_font_family="Times New Roman",
-    #                                      title_font_color='#118DFF',
-    #                                      title = {'x':0.5,
-    #                                               'xanchor':'center'})
-            
-    #     if input.time() == "Year to date":
-          
-    #         filtered_data = d[(d['Date']> this_year_start)
-    #                          & (d['Date'] < today)]
-            
-    #         filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
-
-    #         pollution_plot = px.area(data_frame=d,
-    #                                     x="Date",
-    #                                         y="PM 10",
-    #                                         markers = True,
-    #                                        color_discrete_sequence=['#118DFF'],
-    #                                        template='plotly_white',
-    #                                        title = f"Analysing year to date: {this_year_start.date()} to {today.date()}")
-            
-    # #         # Update marker styles
-    #         pollution_plot.update_traces(mode='lines+markers',
-    #                                       marker=dict(size=6, symbol='diamond', 
-    #                                      color='black'))
-            
-    #         pollution_plot.update_layout(title_font_family="Times New Roman",
-    #                                      title_font_color='#118DFF',
-    #                                      title = {'x':0.5,
-    #                                               'xanchor':'center'})
-            
-
-    # #     # Store the current dataset for use in other functions
-    #     current_dataset.set(filtered_data)
-    #     w = go.FigureWidget(pollution_plot.data, pollution_plot.layout) 
-    #     w.data[0].on_click(on_point_click) 
-    #     w.data[0].on_hover(on_point_hover) 
-    #     w.data[0].on_selection(on_point_selection) 
-    #     # w.data[0].on_click(on_point_click_2) 
-    #     return w 
     
 
     def on_point_click(trace, points, state): 
@@ -614,54 +624,13 @@ def server(input, output, session: Session):
         
         return ui.HTML("<div>Click a point to see more details</div>")
 
-    # @render.ui
-    # def pinned_points_output():
-    #     points = pinned_points.get()
-    #     if not points:
-    #         return ui.div()
-        
-    #     cards = []
-    #     for point in points:
-    #         x_offset = 10  # pixels to right
-    #         y_offset = -100  # pixels above
-            
-            
-    #         # Position offset so card doesn't cover the point
-    #         x_offset = 10
-    #         y_offset = -100
-            
-    #         # Create positioned card
-    #          # Create a positioned card
-    #         card = ui.div(
-    #             {
-    #                 "class": "pin-card",
-    #                 "style": f"left: {point['x_pos'] + x_offset}px; top: {point['y_pos'] + y_offset}px;"
-    #             },
-    #             ui.div(
-    #                 {"class": "pin-header"},
-    #                 ui.strong(f"Date: {point['date']}"),
-    #                 ui.span(
-    #                     {"class": "close-btn", 
-    #                      "onclick": f"Shiny.setInputValue('remove_pin', '{point['id']}')"},
-    #                     "×"
-    #                 )
-    #             ),
-    #             ui.div(
-    #                 {"class": "pin-content"},
-    #                 ui.div(
-    #                     {"class": "pin-value"},
-    #                     f"Value: {point['value']:.2f}"
-    #                 ),
-    #                 ui.p(f"Site: {point['site']}"),
-    #                 ui.p(f"Parameter: {point['parameter']}")
-    #             )
-    #         )
-    #         cards.append(card)
-    #     return ui.div(*cards)
+  
 
     @render_widget  
     def line_plot_comparative():
         
+        
+        plot_counter_comparative()
         # d = summary_data
         d = summary_data[summary_data['Site_Id'] == input.var()]
 
@@ -669,88 +638,158 @@ def server(input, output, session: Session):
 
         if input.time_comparative() == "Last Quarter":
            
-            d = d[(d['Date']> thirteen_weeks_ago_last_year)
+            filtered_data = d[(d['Date']> thirteen_weeks_ago_last_year)
                              & (d['Date'] < year_ago)]
             
-            d["Date"] = d["Date"].dt.strftime('%Y-%m-%d')
+            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
 
-            pollution_plot = px.area(data_frame=d,
-                                        x="Date",
-                                            y="PM 10",
-                                            markers = True,
-                                            color_discrete_sequence=['#A3DDB3'],
-                                            template='plotly_white',
-                                            title = f"Analysing Last Quarter: {thirteen_weeks_ago_last_year.date()} to {year_ago.date()}"
-                                            )
-            
-            # Update marker styles
-            pollution_plot.update_traces(mode='lines+markers',
-                                          marker=dict(size=6, symbol='diamond', 
-                                         color='black'))
-            
-            pollution_plot.update_layout(title_font_family="Times New Roman",
-                                         title_font_color='#A3DDB3',
-                                         title = {'x':0.5,
-                                                  'xanchor':'center'})
+            fig = create_comparative_plot(filtered_data)
 
-        
+            widget = go.FigureWidget(fig)
+
+
+            def handle_click_4(trace, points, selector):
+
+                if len(points.point_inds)>0:
+                    idx = points.point_inds[0]
+                    date_val = filtered_data['Date'].iloc[idx]
+
+                    y1_val = filtered_data['PM 10'].iloc[idx]
+
+                    # update the reactive value with the new point
+
+                    current_points = points_store_comparative()
+
+                    current_points.append((date_val,
+                                        y1_val))
+                    
+                    points_store_comparative.set(current_points)
+
+                    # Force a redraw by increneting the counter
+
+                    plot_counter_comparative.set(plot_counter_comparative() + 1)
+
+            widget.data[0].on_click(handle_click_4)
+
+            return widget
+
         if input.time_comparative() == "Previous 52 Weeks":
     
-            d = d[(d['Date']> two_years_ago)
+            filtered_data = d[(d['Date']> two_years_ago)
                              & (d['Date'] < year_ago)]
             
-            d["Date"] = d["Date"].dt.strftime('%Y-%m-%d')
+            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
 
-            pollution_plot = px.area(data_frame=d,
-                                        x="Date",
-                                            y="PM 10",
-                                            markers = True,
+            fig = create_comparative_plot(filtered_data)
+
+            widget = go.FigureWidget(fig)
+
+
+            def handle_click_5(trace, points, selector):
+
+                if len(points.point_inds)>0:
+                    idx = points.point_inds[0]
+                    date_val = filtered_data['Date'].iloc[idx]
+
+                    y1_val = filtered_data['PM 10'].iloc[idx]
+
+                    # update the reactive value with the new point
+
+                    current_points = points_store_comparative()
+
+                    current_points.append((date_val,
+                                        y1_val))
+                    
+                    points_store_comparative.set(current_points)
+
+                    # Force a redraw by increneting the counter
+
+                    plot_counter_comparative.set(plot_counter_comparative() + 1)
+
+            widget.data[0].on_click(handle_click_5)
+
+            return widget
+
+            # pollution_plot = px.area(data_frame=d,
+            #                             x="Date",
+            #                                 y="PM 10",
+            #                                 markers = True,
                                             
-                                            color_discrete_sequence=['#A3DDB3'],
-                                            template='plotly_white',
-                                            title = f"Analysing previous 52 weeks: {two_years_ago.date()} to {year_ago.date()}"
-                                            )
+            #                                 color_discrete_sequence=['#A3DDB3'],
+            #                                 template='plotly_white',
+            #                                 title = f"Analysing previous 52 weeks: {two_years_ago.date()} to {year_ago.date()}"
+            #                                 )
             
-            # Update marker styles
-            pollution_plot.update_traces(mode='lines+markers',
-                                          marker=dict(size=6, symbol='diamond', 
-                                         color='black'))
+            # # Update marker styles
+            # pollution_plot.update_traces(mode='lines+markers',
+            #                               marker=dict(size=6, symbol='diamond', 
+            #                              color='black'))
             
-            pollution_plot.update_layout(title_font_family="Times New Roman",
-                                         title_font_color='#A3DDB3',
-                                         title = {'x':0.5,
-                                                  'xanchor':'center'})
+            # pollution_plot.update_layout(title_font_family="Times New Roman",
+            #                              title_font_color='#A3DDB3',
+            #                              title = {'x':0.5,
+            #                                       'xanchor':'center'})
             
 
         if input.time_comparative() == "Previous year to date":
          
-            d = d[(d['Date']> last_year_start)
+            filtered_data = d[(d['Date']> last_year_start)
                              & (d['Date'] < year_ago)]
             
-            d["Date"] = d["Date"].dt.strftime('%Y-%m-%d')
+            filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
 
-            pollution_plot = px.area(data_frame=d,
-                                        x="Date",
-                                            y="PM 10",
-                                            markers = True,
+            fig = create_comparative_plot(filtered_data)
+
+            widget = go.FigureWidget(fig)
+
+
+            def handle_click_6(trace, points, selector):
+
+                if len(points.point_inds)>0:
+                    idx = points.point_inds[0]
+                    date_val = filtered_data['Date'].iloc[idx]
+
+                    y1_val = filtered_data['PM 10'].iloc[idx]
+
+                    # update the reactive value with the new point
+
+                    current_points = points_store_comparative()
+
+                    current_points.append((date_val,
+                                        y1_val))
+                    
+                    points_store_comparative.set(current_points)
+
+                    # Force a redraw by increneting the counter
+
+                    plot_counter_comparative.set(plot_counter_comparative() + 1)
+
+            widget.data[0].on_click(handle_click_6)
+
+            return widget
+
+        #     pollution_plot = px.area(data_frame=d,
+        #                                 x="Date",
+        #                                     y="PM 10",
+        #                                     markers = True,
                                             
-                                            color_discrete_sequence=['#A3DDB3'],
-                                            template='plotly_white',
-                                            title = f"Analysing previous year to date: {last_year_start.date()} to {year_ago.date()}"
-                                            )
+        #                                     color_discrete_sequence=['#A3DDB3'],
+        #                                     template='plotly_white',
+        #                                     title = f"Analysing previous year to date: {last_year_start.date()} to {year_ago.date()}"
+        #                                     )
             
-            # Update marker styles
-            pollution_plot.update_traces(mode='lines+markers',
-                                          marker=dict(size=6, symbol='diamond', 
-                                         color='black'))
+        #     # Update marker styles
+        #     pollution_plot.update_traces(mode='lines+markers',
+        #                                   marker=dict(size=6, symbol='diamond', 
+        #                                  color='black'))
             
-            pollution_plot.update_layout(title_font_family="Times New Roman",
-                                         title_font_color='#A3DDB3',
-                                         title = {'x':0.5,
-                                                  'xanchor':'center'})
+        #     pollution_plot.update_layout(title_font_family="Times New Roman",
+        #                                  title_font_color='#A3DDB3',
+        #                                  title = {'x':0.5,
+        #                                           'xanchor':'center'})
 
 
-        return pollution_plot
+        # return pollution_plot
     
     @output
     @render.data_frame

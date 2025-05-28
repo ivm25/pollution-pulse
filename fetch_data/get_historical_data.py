@@ -4,6 +4,8 @@ import requests
 import logging
 import urllib
 import datetime as dt
+from datetime import datetime, timedelta
+from datetime import date
 import pandas as pd
 
 
@@ -35,12 +37,14 @@ class aqms_api_class(object):
 
         ObsRequest = {}
 
-        ObsRequest['Parameters'] = ['PM10','PM2.5']
+        ObsRequest['Parameters'] = ['PM10','PM2.5','TEMP']
         ObsRequest['Sites'] = [336,4330,2330, 7330,3330,329,5330]
         StartDate = dt.date(2021,11,25)
-        EndDate = dt.date(2025,3,7)
+        today = date.today()
+        EndDate = dt.date(2025,5,7)
         ObsRequest['StartDate'] = StartDate.strftime('%Y-%m-%d')
-        ObsRequest['EndDate'] = EndDate.strftime('%Y-%m-%d')
+        # ObsRequest['EndDate'] = EndDate.strftime('%Y-%m-%d')
+        ObsRequest['EndDate'] = today.strftime('%Y-%m-%d')
         ObsRequest['Categories'] = ['Averages']
         ObsRequest['SubCategories'] = ['Hourly']
         ObsRequest['Frequency'] = ['Hourly average']

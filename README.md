@@ -20,7 +20,10 @@ This project aims to analyze and forecast air pollution levels in New South Wale
 - Interactive dashboard for visualizing air pollution data using **Python Shiny**.
 - Analysis of air pollution trends across various locations in NSW.
 - Visualization of key pollutants over time.
-- Integration of `sktime` and `pytimetk` for advanced forecasting and machine learning models (coming soon).
+-This project involves use of machine learning algorithms (sktime/pytimetk) to classify Air Quality Category based on
+- Time based features and forecast the pollutant (NO2, PM10, PM 2.5) levels. It includes automated data capture from the 
+    API, data cleaning,feature engineering, and model selection. The final Shiny app comprises of Dynamic visualisations in Plotly, in addition to the ability of producing automated insights by leveraging langchain libraries.
+
 
 ## Installation
 To get started with this project, clone the repository and install the required dependencies:

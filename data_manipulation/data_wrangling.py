@@ -29,14 +29,14 @@ def summary_by_time(df, key1,key2):
 
 def air_category_summary_by_time(df, key1,
                                  key2,
-                                 key3):
+                                 key3,key4):
 
     data_by_category = df\
-                    .groupby([key1,key2,key3])\
+                    .groupby([key1,key2,key3,key4])\
                     .summarize_by_time(
                         date_column = 'Date',
                         value_column = 'Value',
-                        freq = "W",
+                        freq = "H",
                         agg_func = 'mean',
                         wide_format = False,
                         engine = "polars"
@@ -76,6 +76,7 @@ def data_for_classification(df,
 
     key_data = df[['Site_Id',
                    'Date',
+                   'Hour',
                     'Value',
                     'AirQualityCategory',
                     'Parameter_ParameterDescription']]

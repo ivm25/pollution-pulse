@@ -30,6 +30,11 @@ from pandas import json_normalize
 import re
 import os
 from uuid import uuid4
+import ibis
+import duckdb
+
+
+
 
 analysis_data = pd.read_csv('HistoricalObs.csv', 
                    encoding = 'unicode_escape')
@@ -104,7 +109,8 @@ app_ui = ui.page_fluid(
              ui.navset_pill(
                  ui.nav_panel("Comprative Analysis of Air Pollution",
                               ui.layout_sidebar(
-                                  ui.sidebar( ui.input_radio_buttons(
+                                  ui.sidebar( 
+                                              ui.input_radio_buttons(
                                             "var", 
                                             "Select a Site ID",
                                               choices= list(summary_data['Site_Id']),
@@ -121,13 +127,7 @@ app_ui = ui.page_fluid(
                                              ui.layout_columns(
                                                              
                                                                 ui.row(ui.output_data_frame("insights_1"),
-                                                                    #    ui.card(
-                                                                    #             ui.card_header("Pinned Data Point"),
-                                                                    #             ui.output_text("click_date"),
-                                                                    #             ui.h3(ui.output_text("click_value")),
-                                                                    #             ui.output_ui("additional_info"),
-                                                                    #             style="height: 200px; background-color: #f8f9fa;"
-                                                                    #         )
+                                                                
                                                                                         ),
                                                                        
                                                                
@@ -140,11 +140,7 @@ app_ui = ui.page_fluid(
                                                                            inline=True),
                                                                 ui.card(output_widget("line_plot"),
                                                                         full_screen=True)
-                                                                #                     ui.div(
-                                                                #     {"class": "plot-container"},
-                                                                #     output_widget("line_plot"),
-                                                                #     ui.output_ui("pinned_points_output")
-                                                                # )
+                                                             
                                                                         ),
                                                                          ui.input_action_button("clear_lines",
                                                                                                 "Clear Data"),
@@ -383,16 +379,18 @@ def server(input, output, session: Session):
     def line_plot():
 
         plot_counter()
-
+        
         d = summary_data[summary_data['Site_Id'] == input.var()]
 
         d = d[d['Parameter_ParameterDescription'] == input.pollutant()]
+
+       
 
         
 
         if input.time() == 'This Quarter':
           
-            filtered_data = d[(d['Date']> this_year_start)
+            filtered_data = d[(d['Date']> thirteen_weeks_ago)
                                 & (d['Date'] < today)]
             
             filtered_data["Date"] = filtered_data["Date"].dt.strftime('%Y-%m-%d')
@@ -524,108 +522,6 @@ def server(input, output, session: Session):
 
 
     
-
-    def on_point_click(trace, points, state): 
-        click_reactive.set(points) 
-
-    def on_point_hover(trace, points, state): 
-        hover_reactive.set(points) 
-
-    def on_point_selection(trace, points, state): 
-        selection_reactive.set(points)
-
-    # def on_point_click_2(trace, points, state): 
-    #     if not hasattr(points, 'point_inds') or not points.point_inds:
-    #         return
-        
-    #     # Get the index of the clicked point
-    #     point_idx = points.point_inds[0]
-        
-    #     # Get the corresponding data
-    #     df = current_dataset.get()
-    #     if df.empty or point_idx >= len(df):
-    #         return
-            
-    #     row = df.iloc[point_idx]
-        
-    #     # Create unique ID for this pin
-    #     point_id = str(uuid4())
-        
-    #     # Get pixel coordinates from the click event
-    #     # points.points_event contains the pixel coordinates
-    #     if not hasattr(points, 'points_event') or not points.points_event:
-    #         return
-            
-    #     click_x = points.points_event[0]['x']
-    #     click_y = points.points_event[0]['y']
-        
-    #     # Add to pinned points with position information
-    #     current_pins = pinned_points.get().copy()
-    #     current_pins.append({
-    #         'id': point_id,
-    #         'date': row['Date_str'],
-    #         'value': row['PM 10'],
-    #         'site': row['Site_Id'],
-    #         'parameter': row['Parameter_ParameterDescription'],
-    #         'x_pos': click_x,  # Store x position
-    #         'y_pos': click_y   # Store y position
-    #     })
-    #     pinned_points.set(current_pins)
-        
-    #     # Inform user of successful pin
-    #     session.notification_show("Point pinned!", 
-    #                              type="message",
-    #                              duration=3)
-
-
-    @render.text
-    def click_date():
-        points_data = click_reactive.get()
-        if points_data and hasattr(points_data, 'xs') and len(points_data.xs) > 0:
-            return f"Date: {points_data.xs[0]}"
-        return "Click a point to pin"
-    
-    @render.text
-    def click_value():
-        points_data = click_reactive.get()
-        if points_data and hasattr(points_data, 'ys') and len(points_data.ys) > 0:
-            return f"{points_data.ys[0]:.2f}"
-        return "No data pinned"
-
-    @render.ui
-    def additional_info():
-        points_data = click_reactive.get()
-        if points_data and hasattr(points_data, 'xs') and len(points_data.xs) > 0:
-            date_str = points_data.xs[0]
-            df = current_dataset.get()
-            
-            # Find the row that matches the clicked date
-            if not df.empty and date_str in df['Date'].values:
-                row = df[df['Date'] == date_str].iloc[0]
-                
-                # Extract additional variables you want to display
-                # For example, assuming there are columns like 'Value_min', 'Value_max' in your dataset
-                additional_cols = []
-                for col in df.columns:
-                    if col not in ['Date',
-                                    'PM 10',
-                                      'Site_Id',
-                                        'Parameter_ParameterDescription']:
-                        additional_cols.append(col)
-                
-                # Create HTML with additional information
-                info_html = "<div style='font-size: 0.8em; color: #666;'>"
-                for col in additional_cols[:3]:  # Limit to first 3 additional columns
-                    if col in row:
-                        info_html += f"<div><strong>{col}:</strong> {row[col]}</div>"
-                info_html += "</div>"
-                
-                return ui.HTML(info_html)
-        
-        return ui.HTML("<div>Click a point to see more details</div>")
-
-  
-
     @render_widget  
     def line_plot_comparative():
         

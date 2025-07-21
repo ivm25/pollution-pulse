@@ -38,3 +38,6 @@ langchain
 langchain_openai
 langchain-experimental
 langsmith
+ibis
+ibis-framework
+ibis-framework[duckdb]

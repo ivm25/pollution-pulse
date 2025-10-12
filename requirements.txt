@@ -4,7 +4,8 @@ requests
 logging
 urllib3
 datetime
-numpy
+numpy<2
+
 pandas
 
 matplotlib
@@ -13,6 +14,8 @@ seaborn
 plotnine
 plotly
 sktime
+pmdarima
+scipy<1.16
 scikit-learn
 pytimetk
 
@@ -38,6 +41,3 @@ langchain
 langchain_openai
 langchain-experimental
 langsmith
-ibis
-ibis-framework
-ibis-framework[duckdb]

@@ -19,7 +19,7 @@ from plotly.callbacks import Points
 
 from data_manipulation.data_wrangling import summary_by_time, summary_by_time_weekly, anamoly_detection
 from datetime import datetime, timedelta
-
+from models.forecasting import forecasting_data_daily,forecasting_data_daily_sarimax
 import langchain
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
@@ -30,9 +30,6 @@ from pandas import json_normalize
 import re
 import os
 from uuid import uuid4
-import ibis
-import duckdb
-
 
 
 
@@ -40,6 +37,8 @@ analysis_data = pd.read_csv('HistoricalObs.csv',
                    encoding = 'unicode_escape')
 
 analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
+key_data = analysis_data[analysis_data['Parameter_ParameterDescription'] == 'Temperature']
+key_data['Site_Id'] = key_data['Site_Id'].astype(str)
 
 summary_data = summary_by_time(analysis_data,
                                'Site_Id','Parameter_ParameterDescription')
@@ -48,14 +47,14 @@ summary_data = summary_by_time(analysis_data,
 summary_data_weekly = summary_by_time_weekly(analysis_data,
                                'Site_Id','Parameter_ParameterDescription')
 
-anomaly_data = anamoly_detection(summary_data_weekly, 
-                                'Site_Id','Parameter_ParameterDescription')
+# anomaly_data = anamoly_detection(summary_data_weekly, 
+#                                 'Site_Id','Parameter_ParameterDescription')
 
 summary_data['Site_Id'] = summary_data['Site_Id'].astype(str)
 
 # change the name of Value_mean to PM 10 values
 
-summary_data.rename(columns = {'Value_mean': 'PM 10'},
+summary_data.rename(columns = {'Value_mean': 'Value'},
                      inplace = True)       
 
 #-----------------------------------------------------------
@@ -96,7 +95,6 @@ llm = ChatOpenAI(
 
 
 
-
 #--------------------------------------------------------------
 
 
@@ -105,6 +103,7 @@ llm = ChatOpenAI(
 app_ui = ui.page_fluid(
         #  ui.tags.style(HTML(custom_css)),
             # ui.tags.style(HTML(custom_css)),
+          
              ui.page_navbar(title = "Pollution Pulse"),
              ui.navset_pill(
                  ui.nav_panel("Comprative Analysis of Air Pollution",
@@ -163,22 +162,37 @@ app_ui = ui.page_fluid(
                                                             ),
                                                 )
                              )
-                                  ,ui.nav_panel("Anomaly Detection",
+                                  ,
+                                #   ui.nav_panel("Anomaly Detection",
+                                #                 ui.layout_sidebar(
+                                #                     ui.sidebar(ui.input_radio_buttons(
+                                #                                 "var_2", 
+                                #                                 "Select a Site ID",
+                                #                                 choices= list(summary_data['Site_Id']),
+                                #                                 selected = '329',
+                                #                                                         ),
+                                #                                 ui.input_radio_buttons(
+                                #                                 "pollutant_anomaly", 
+                                #                                 "Select a pollutant",
+                                #                                 choices= list(summary_data['Parameter_ParameterDescription']),
+                                #                                 selected = 'PM10',
+                                #                                     )    ),
+                                #                     output_widget("anomaly_plot")
+                                #                 )),
+
+                                    ui.nav_panel("Forecasting",
                                                 ui.layout_sidebar(
                                                     ui.sidebar(ui.input_radio_buttons(
-                                                                "var_2", 
+                                                                "var_3", 
                                                                 "Select a Site ID",
                                                                 choices= list(summary_data['Site_Id']),
                                                                 selected = '329',
                                                                                         ),
-                                                                ui.input_radio_buttons(
-                                                                "pollutant_anomaly", 
-                                                                "Select a pollutant",
-                                                                choices= list(summary_data['Parameter_ParameterDescription']),
-                                                                selected = 'PM10',
-                                                                    )    ),
-                                                    output_widget("anomaly_plot")
-                                                )))
+                                                              
+                                                                        ),
+                                                    output_widget("forecast_plot")
+                                                )),
+                                                )
                                   
                                  ,
                                    theme = shinyswatch.theme.minty(),
@@ -212,7 +226,7 @@ def server(input, output, session: Session):
 
         fig.add_trace(go.Scatter(
              x = f['Date'],
-             y = f['PM 10'],
+             y = f['Value'],
             
              fill = 'tozeroy',
              mode = 'lines + markers',
@@ -223,8 +237,8 @@ def server(input, output, session: Session):
              hoverinfo='x+y'
         ))
 
-        y_min_primary = f['PM 10'].min() -2
-        y_max_primary = f['PM 10'].max() + 2
+        y_min_primary = f['Value'].min() -2
+        y_max_primary = f['Value'].max() + 2
 
         for i, point in enumerate(points_store()):
             date_val, y1_val = point
@@ -269,6 +283,7 @@ def server(input, output, session: Session):
                 arrowcolor='black',
                 bgcolor='white',
                 bordercolor='red',
+      
 
             )
 
@@ -298,7 +313,7 @@ def server(input, output, session: Session):
 
         fig.add_trace(go.Scatter(
              x = f['Date'],
-             y = f['PM 10'],
+             y = f['Value'],
              fill = 'tozeroy',
              mode = 'lines + markers',
            
@@ -308,8 +323,31 @@ def server(input, output, session: Session):
              hoverinfo='x+y'
         ))
 
-        y_min_primary = f['PM 10'].min() -2
-        y_max_primary = f['PM 10'].max() + 2
+        y_min_primary = f['Value'].min() -2
+        y_max_primary = f['Value'].max() + 2
+        # for i in f['Date']:
+        #     if i == '2024-05-27':
+        #         fig.add_vline(x=i, line_width=2, line_dash="dash", line_color="green")
+        #         fig.add_annotation(
+        #                 x = i,
+        #                 y = 20,
+        #                 xref = "x",
+        #                 yref="y",
+        #                 text = 'test',
+        #                 showarrow=True,
+        #                 captureevents=True,
+        #                 visible=True,
+        #                 clicktoshow='onoff',
+                        
+        #                 arrowhead=2,
+        #                 arrowsize=1,
+        #                 arrowwidth=2,
+        #                 arrowcolor='black',
+        #                 bgcolor='white',
+        #                 bordercolor='red',
+                    
+        #             )
+
 
         for i, point in enumerate(points_store_comparative()):
             date_val, y1_val = point
@@ -354,7 +392,7 @@ def server(input, output, session: Session):
                 arrowcolor='black',
                 bgcolor='white',
                 bordercolor='red',
-
+              
             )
 
 
@@ -407,7 +445,7 @@ def server(input, output, session: Session):
                     idx = points.point_inds[0]
                     date_val = filtered_data['Date'].iloc[idx]
 
-                    y1_val = filtered_data['PM 10'].iloc[idx]
+                    y1_val = filtered_data['Value'].iloc[idx]
 
                     # update the reactive value with the new point
 
@@ -424,6 +462,10 @@ def server(input, output, session: Session):
 
             widget.data[0].on_click(handle_click)
 
+            def handle_relayout(trace, points, selector):
+                # This would be called when annotations are moved
+                # You can capture the new positions here
+                pass
             return widget
         
         if input.time() == 'Last 52 Weeks':
@@ -445,7 +487,7 @@ def server(input, output, session: Session):
                     idx = points.point_inds[0]
                     date_val = filtered_data['Date'].iloc[idx]
 
-                    y1_val = filtered_data['PM 10'].iloc[idx]
+                    y1_val = filtered_data['Value'].iloc[idx]
 
                     # update the reactive value with the new point
 
@@ -483,7 +525,7 @@ def server(input, output, session: Session):
                     idx = points.point_inds[0]
                     date_val = filtered_data['Date'].iloc[idx]
 
-                    y1_val = filtered_data['PM 10'].iloc[idx]
+                    y1_val = filtered_data['Value'].iloc[idx]
 
                     # update the reactive value with the new point
 
@@ -550,7 +592,7 @@ def server(input, output, session: Session):
                     idx = points.point_inds[0]
                     date_val = filtered_data['Date'].iloc[idx]
 
-                    y1_val = filtered_data['PM 10'].iloc[idx]
+                    y1_val = filtered_data['Value'].iloc[idx]
 
                     # update the reactive value with the new point
 
@@ -587,7 +629,7 @@ def server(input, output, session: Session):
                     idx = points.point_inds[0]
                     date_val = filtered_data['Date'].iloc[idx]
 
-                    y1_val = filtered_data['PM 10'].iloc[idx]
+                    y1_val = filtered_data['Value'].iloc[idx]
 
                     # update the reactive value with the new point
 
@@ -606,25 +648,7 @@ def server(input, output, session: Session):
 
             return widget
 
-            # pollution_plot = px.area(data_frame=d,
-            #                             x="Date",
-            #                                 y="PM 10",
-            #                                 markers = True,
-                                            
-            #                                 color_discrete_sequence=['#A3DDB3'],
-            #                                 template='plotly_white',
-            #                                 title = f"Analysing previous 52 weeks: {two_years_ago.date()} to {year_ago.date()}"
-            #                                 )
-            
-            # # Update marker styles
-            # pollution_plot.update_traces(mode='lines+markers',
-            #                               marker=dict(size=6, symbol='diamond', 
-            #                              color='black'))
-            
-            # pollution_plot.update_layout(title_font_family="Times New Roman",
-            #                              title_font_color='#A3DDB3',
-            #                              title = {'x':0.5,
-            #                                       'xanchor':'center'})
+        
             
 
         if input.time_comparative() == "Previous year to date":
@@ -645,7 +669,7 @@ def server(input, output, session: Session):
                     idx = points.point_inds[0]
                     date_val = filtered_data['Date'].iloc[idx]
 
-                    y1_val = filtered_data['PM 10'].iloc[idx]
+                    y1_val = filtered_data['Value'].iloc[idx]
 
                     # update the reactive value with the new point
 
@@ -664,29 +688,7 @@ def server(input, output, session: Session):
 
             return widget
 
-        #     pollution_plot = px.area(data_frame=d,
-        #                                 x="Date",
-        #                                     y="PM 10",
-        #                                     markers = True,
-                                            
-        #                                     color_discrete_sequence=['#A3DDB3'],
-        #                                     template='plotly_white',
-        #                                     title = f"Analysing previous year to date: {last_year_start.date()} to {year_ago.date()}"
-        #                                     )
-            
-        #     # Update marker styles
-        #     pollution_plot.update_traces(mode='lines+markers',
-        #                                   marker=dict(size=6, symbol='diamond', 
-        #                                  color='black'))
-            
-        #     pollution_plot.update_layout(title_font_family="Times New Roman",
-        #                                  title_font_color='#A3DDB3',
-        #                                  title = {'x':0.5,
-        #                                           'xanchor':'center'})
-
-
-        # return pollution_plot
-    
+   
     @output
     @render.data_frame
     def insights_1():
@@ -895,25 +897,69 @@ def server(input, output, session: Session):
                                     width = "700px",
                                    )
         
+    # @render_widget
+    # def anomaly_plot():
+        
+    #     # anomaly_data_filtered = anomaly_data[anomaly_data['Site_Id'] == input.var_2()]
+
+    #     anomaly_data_filtered = anomaly_data[anomaly_data['Parameter_ParameterDescription'] == input.pollutant_anomaly()]
+    #     fig =  anomaly_data_filtered \
+    #             .groupby(["Site_Id"]) \
+    #             .plot_anomalies(
+    #                 date_column = "Date", 
+    #                 facet_ncol = 2, 
+    #                 width = 2000,
+    #                 height = 1000,
+                  
+                  
+    #             )
+        
+        # return fig
+
     @render_widget
-    def anomaly_plot():
+    def forecast_plot():
         
-        # anomaly_data_filtered = anomaly_data[anomaly_data['Site_Id'] == input.var_2()]
+        # Get the temperature data for forecasting
+        f = key_data[key_data['Site_Id'] == input.var_3()]
+        
+        # Call the forecasting function
+        forecasting_data = forecasting_data_daily(temp_data=f,
+                                             )
+        
+        # Create a plotly figure for the forecasted data
+        fig = go.Figure()
 
-        anomaly_data_filtered = anomaly_data[anomaly_data['Parameter_ParameterDescription'] == input.pollutant_anomaly()]
-        fig =  anomaly_data_filtered \
-                .groupby(["Site_Id"]) \
-                .plot_anomalies(
-                    date_column = "Date", 
-                    facet_ncol = 2, 
-                    width = 2000,
-                    height = 1000,
-                  
-                  
-                )
-        
+        fig.add_trace(go.Scatter(
+            x=forecasting_data['Date'],
+            y=forecasting_data['Value_mean'],
+            mode='lines',
+            name='Forecasted Temperature',
+            line=dict(color='blue')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=forecasting_data['Date'],
+            y=forecasting_data['Lower Bound'],
+            mode='markers',
+            name='Lower Bound',
+            line=dict(color='black',
+                      width =1)
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=forecasting_data['Date'],
+            y=forecasting_data['Upper Bound'],
+            mode='markers',
+            name='Upper Bound',
+            line=dict(color='black',
+                      width =1)
+        ))
+
+        fig.update_layout(title='Forecasted Daily Temperature',
+                          xaxis_title='Date',
+                          yaxis_title='Temperature (°C)',
+                          template='plotly_white')
+
         return fig
-
-    
 app = App(app_ui, server)
 

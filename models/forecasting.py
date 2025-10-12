@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import sktime
+from sktime.forecasting.arima import ARIMA
 import pytimetk as tk
 from pytimetk import summarize_by_time
 from pytimetk import anomalize
@@ -14,129 +15,174 @@ from sktime.dists_kernels import FlatDist, ScipyDist
 from sklearn.model_selection import train_test_split
 
 from sklearn.ensemble import RandomForestRegressor
+from sktime.forecasting.sarimax import SARIMAX
 
 analysis_data = pd.read_csv('HistoricalObs.csv', 
                    encoding = 'unicode_escape')
 
 analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
 
-# key_data = analysis_data[analysis_data['Parameter_ParameterDescription'] != 'Temperature']
 
 key_data = analysis_data[analysis_data['Parameter_ParameterDescription'] == 'Temperature']
 
 
-forecasting_data_weekly = summary_by_time_weekly(key_data,
-                                           'Site_Id',
-                                           'Parameter_ParameterDescription')
 
-forecasting_data = forecasting_data_weekly[['Site_Id',
-                                  'Date',
-                                  'Value_mean']]\
-                                  .dropna()
 
-pollutant_df_with_futureframe = forecasting_data\
-    .groupby('Site_Id') \
-    .future_frame(
-        date_column = 'Date',
-        length_out  = 20
+def forecasting_data_daily(temp_data,
+                            ):
+    """
+    Summarizes the data by day for forecasting.
+    
+    Parameters:
+    key_data (DataFrame): The input data containing pollution measurements.
+    site_col (str): The column name for site identifiers.
+    param_col (str): The column name for parameter descriptions.
+    
+    Returns:
+    DataFrame: A DataFrame with daily summaries of the specified parameters.
+    """
+  
+    forecasting_data_daily = summary_by_time(temp_data,
+                                            'Site_Id',
+                                                'Parameter_ParameterDescription')
+
+    forecasting_data_daily_processed = forecasting_data_daily[['Date',
+                                                               'Site_Id',
+                                                               'Value_mean']].dropna()
+
+
+    # Create heirarchial data for forecasting
+    forecasting_data_daily_processed['Date'] = pd.to_datetime(forecasting_data_daily_processed['Date'])
+
+    forecasting_data = forecasting_data_daily_processed.copy()
+    forecasting_data = forecasting_data.reset_index()
+    forecasting_data['Date'] = forecasting_data['Date'].dt.to_period('D')
+
+
+    forecasting_data_daily_processed = forecasting_data_daily_processed.reset_index()
+    forecasting_data_daily_processed['time_period'] = forecasting_data_daily_processed['Date'].dt.to_period('D')
+    temperature_df = forecasting_data_daily_processed\
+        .groupby(['Site_Id','time_period']).mean()   
+    temperature_df = temperature_df.drop(columns = ['index','Date'])
+
+    # Create a baseline ARIMA model for each site
+    r = range(1,31)
+
+    r_list = []
+    for i in r:
+        r_list.append(i)
+    forecaster = ARIMA()
+    forecaster.fit(temperature_df,
+                    fh=r_list)
+
+    forecaster.predict()
+
+    y_pred = forecaster.predict()
+
+
+    # Probababilistic forecasting
+    y_pred_int = forecaster.predict_interval(
+        
+        coverage=0.95
     )
+    ret = pd.concat([y_pred, y_pred_int],
+             axis = 1)
+    predictions_with_intervals = ret.reset_index()
+    
+    predictions_with_intervals.columns = ['Site_Id',
+                                           'Date',
+                                             'Value_mean',
+                                               'Lower Bound',
+                                                 'Upper Bound']
+    
+    # concatanate the dataframes
+    predictions_data = pd.concat([forecasting_data,
+                                  predictions_with_intervals],
+                                  axis = 0)
+    
 
-pollutants_df_dates = pollutant_df_with_futureframe.augment_timeseries_signature(date_column = 'Date')
-pollutants_df_dates.head(10)
-pollutants_df_dates.glimpse()
+    predictions_data['Date'] = predictions_data['Date'].dt.to_timestamp()
+
+    return predictions_data
 
 
-df_with_lags = pollutants_df_dates\
-    .groupby('Site_Id') \
-    .augment_lags(
-        date_column  = 'Date',
-        value_column = 'Value_mean',
-        lags         = [5,6,7,8,9]
+
+
+def forecasting_data_daily_sarimax(temp_data,
+                            ):
+    """
+    Summarizes the data by day for forecasting.
+    
+    Parameters:
+    key_data (DataFrame): The input data containing pollution measurements.
+    site_col (str): The column name for site identifiers.
+    param_col (str): The column name for parameter descriptions.
+    
+    Returns:
+    DataFrame: A DataFrame with daily summaries of the specified parameters.
+    """
+  
+    forecasting_data_daily = summary_by_time(temp_data,
+                                            'Site_Id',
+                                                'Parameter_ParameterDescription')
+
+    forecasting_data_daily_processed = forecasting_data_daily[['Date',
+                                                               'Site_Id',
+                                                               'Value_mean']].dropna()
+
+
+    # Create heirarchial data for forecasting
+    forecasting_data_daily_processed['Date'] = pd.to_datetime(forecasting_data_daily_processed['Date'])
+
+    forecasting_data = forecasting_data_daily_processed.copy()
+    forecasting_data = forecasting_data.reset_index()
+    forecasting_data['Date'] = forecasting_data['Date'].dt.to_period('D')
+
+
+    forecasting_data_daily_processed = forecasting_data_daily_processed.reset_index()
+    forecasting_data_daily_processed['time_period'] = forecasting_data_daily_processed['Date'].dt.to_period('D')
+    temperature_df = forecasting_data_daily_processed\
+        .groupby(['Site_Id','time_period']).mean()   
+    temperature_df = temperature_df.drop(columns = ['index','Date'])
+
+    # Create a baseline ARIMA model for each site
+    r = range(1,31)
+
+    r_list = []
+    for i in r:
+        r_list.append(i)
+    forecaster_2 = SARIMAX(order = (1,0,0),
+                        trend = 'c', 
+                        seasonal_order=(1, 0, 0, 4))
+    forecaster_2.fit(temperature_df,
+                    fh=r_list)
+
+    forecaster_2.predict()
+
+    y_pred = forecaster_2.predict()
+
+
+    # Probababilistic forecasting
+    y_pred_int = forecaster_2.predict_interval(
+        
+        coverage=0.95
     )
+    ret = pd.concat([y_pred, y_pred_int],
+             axis = 1)
+    predictions_with_intervals = ret.reset_index()
+    
+    predictions_with_intervals.columns = ['Site_Id',
+                                           'Date',
+                                             'Value_mean',
+                                               'Lower Bound',
+                                                 'Upper Bound']
+    
+    # concatanate the dataframes
+    predictions_data = pd.concat([forecasting_data,
+                                  predictions_with_intervals],
+                                  axis = 0)
+    
 
+    predictions_data['Date'] = predictions_data['Date'].dt.to_timestamp()
 
-df_with_lags.head(5)
-
-
-lag_columns = [col for col in df_with_lags.columns if 'lag' in col]
-
-
-df_with_rolling = df_with_lags \
-    .groupby('Site_Id') \
-    .augment_rolling(
-        date_column  = 'Date',
-        value_column = lag_columns,
-        window  = 4,
-        window_func = 'mean',
-        threads = 1 # Change to -1 to use all available cores
-    ) 
-
-
-df_with_rolling[df_with_rolling.Site_Id ==329].head(-10)
-
-all_lag_columns = [col for col in df_with_rolling.columns if 'lag' in col]
-
-df_no_nas = df_with_rolling \
-    .dropna(subset=all_lag_columns, inplace=False)
-
-df_no_nas.head()
-
-df_no_nas.glimpse()
-
-future = df_no_nas[df_no_nas.Value_mean.isnull()]
-
-train = df_no_nas[df_no_nas.Value_mean.notnull()]
-
-train_columns =  [ 
-    'Site_Id'
-    , 'Date_year'
-    , 'Date_month'
-    , 'Date_yweek'
-    , 'Date_mweek'
-    , 'Date_wday'
-    , 'Value_mean_lag_5'
-    , 'Value_mean_lag_6'
-    , 'Value_mean_lag_7'
-    , 'Value_mean_lag_8'
-    , 'Value_mean_lag_5_rolling_mean_win_4'
-    , 'Value_mean_lag_6_rolling_mean_win_4'
-    , 'Value_mean_lag_7_rolling_mean_win_4'
-    , 'Value_mean_lag_8_rolling_mean_win_4'
-    ]
-
-X = train[train_columns]
-y = train[['Value_mean']]
-
-model = RandomForestRegressor(random_state=123)
-model = model.fit(X, y)
-
-
-predicted_values = model.predict(future[train_columns])
-future['y_pred'] = predicted_values
-
-train['type'] = 'actuals'
-future['type'] = 'prediction'
-
-full_df = pd.concat([train, future])
-
-full_df['Value_mean'] = np.where(full_df.type =='actuals',
-                                  full_df.Value_mean,
-                                    full_df.y_pred)
-
-
-
-predictions_plot = full_df \
-    .groupby('Site_Id') \
-    .plot_timeseries(
-        date_column = 'Date',
-        value_column = 'Value_mean',
-        color_column = 'type',
-        smooth = False,
-        smooth_alpha = 0,
-        facet_ncol = 2,
-        facet_scales = "free",
-        y_intercept_color = tk.palette_timetk()['steel_blue'],
-        width = 800,
-        height = 600,
-        engine = 'plotly'
-    )
+    return predictions_data

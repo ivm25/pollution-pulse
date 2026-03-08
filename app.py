@@ -39,16 +39,17 @@ from pyspark.sql.functions import col
 
 
 
-load_dotenv()
+# load_dotenv()
 
-def get_spark():
-    return DatabricksSession.builder.remote(
-        host=os.getenv("DATABRICKS_HOST"),
-        token=os.getenv("DATABRICKS_TOKEN")
-    ).serverless().getOrCreate()
+# def get_spark():
+#     return DatabricksSession.builder.remote(
+#         host=os.getenv("DATABRICKS_HOST"),
+#         token=os.getenv("DATABRICKS_TOKEN")
+#     ).serverless().getOrCreate()
 
-spark = get_spark()
+# spark = get_spark()
 
+spark = DatabricksSession.builder.serverless().getOrCreate()
 t = spark.read.table("workspace.pollution_data.historical_obs_new") 
 
 analysis_data = t.toPandas()

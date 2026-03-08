@@ -20,9 +20,16 @@ from sktime.forecasting.sarimax import SARIMAX
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sktime.forecasting.neuralforecast import NeuralForecastLSTM
 from sktime.split import temporal_train_test_split
+from databricks.connect.session import DatabricksSession
+from pyspark.sql.functions import col
 
-analysis_data = pd.read_csv('HistoricalObs.csv', 
-                   encoding = 'unicode_escape')
+spark = DatabricksSession.builder.serverless().getOrCreate()
+
+t = spark.read.table("workspace.pollution_data.historical_obs_new") 
+
+analysis_data = t.toPandas()
+
+
 
 analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
 

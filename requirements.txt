@@ -18,7 +18,7 @@ pmdarima
 scipy<1.16
 scikit-learn
 pytimetk
-
+neuralforecast>=1.6.4
 
 shiny
 shinywidgets
@@ -29,7 +29,7 @@ webencodings
 websockets
 widgetsnbextension
 rsconnect-python
-
+torch
 
 
 gunicorn
@@ -41,3 +41,7 @@ langchain
 langchain_openai
 langchain-experimental
 langsmith
+chatlas
+
+databricks-connect
+python-dotenv

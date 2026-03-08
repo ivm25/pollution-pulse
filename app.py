@@ -23,18 +23,38 @@ from models.forecasting import forecasting_data_daily,forecasting_data_daily_sar
 import langchain
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-from langchain.agents.agent_types import AgentType
+# from langchain.agents.agent_types import AgentType
 import tabulate
 import json
 from pandas import json_normalize
 import re
 import os
 from uuid import uuid4
+import chatlas
+from chatlas import ChatOllama
+
+from dotenv import load_dotenv
+from databricks.connect.session import DatabricksSession
+from pyspark.sql.functions import col
 
 
 
-analysis_data = pd.read_csv('HistoricalObs.csv', 
-                   encoding = 'unicode_escape')
+load_dotenv()
+
+def get_spark():
+    return DatabricksSession.builder.remote(
+        host=os.getenv("DATABRICKS_HOST"),
+        token=os.getenv("DATABRICKS_TOKEN")
+    ).serverless().getOrCreate()
+
+spark = get_spark()
+
+t = spark.read.table("workspace.pollution_data.historical_obs_new") 
+
+analysis_data = t.toPandas()
+
+# analysis_data = pd.read_csv('HistoricalObs.csv', 
+#                    encoding = 'unicode_escape')
 
 analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
 key_data = analysis_data[analysis_data['Parameter_ParameterDescription'] == 'Temperature']
@@ -87,13 +107,21 @@ last_year_start = datetime(last_year, 1, 1)
 model = 'gpt-4o-mini'
 
 # Initialize the LLM
-llm = ChatOpenAI(
-    model_name=model,
-    temperature=0,
+# llm = ChatOpenAI(
+#     # model=model,
+#     # temperature=0,
+#     api_key =  os.getenv("OPENAI_API_KEY")
+# )
+
+
+chat = ChatOpenAI(
+    # model=model,
+    # temperature=0,
     api_key =  os.getenv("OPENAI_API_KEY")
 )
 
 
+#--------------------------------------------------------------
 
 #--------------------------------------------------------------
 
@@ -160,6 +188,7 @@ app_ui = ui.page_fluid(
                                                                                                 "Clear Data"),
                                                                             col_widths=[4,7,1]
                                                             ),
+                                                            #  ui.chat_ui(id="my_chat", messages=["Welcome!"])
                                                 )
                              )
                                   ,
@@ -187,6 +216,12 @@ app_ui = ui.page_fluid(
                                                                 "Select a Site ID",
                                                                 choices= list(summary_data['Site_Id']),
                                                                 selected = '329',
+                                                                                        ),
+                                                                ui.input_radio_buttons(
+                                                                "forecasting_model", 
+                                                                "Select a model",
+                                                                choices= ['ARIMA','SARIMAX','LSTM'],
+                                                                selected = 'ARIMA',
                                                                                         ),
                                                               
                                                                         ),
@@ -218,6 +253,13 @@ def server(input, output, session: Session):
 
     points_store_comparative = reactive.value([])
     plot_counter_comparative = reactive.value(0)
+    
+
+    # chat = ui.Chat(id="my_chat")
+    
+    # chat_client = ChatOpenAI(model="gpt-4o-mini",
+    #                          api_key=os.getenv("OPENAI_API_KEY"))
+    
 
     def create_plot(f):
 
@@ -705,8 +747,11 @@ def server(input, output, session: Session):
             data_analysis_agent = create_pandas_dataframe_agent(
                 llm, 
                 d, 
-                agent_type=AgentType.OPENAI_FUNCTIONS,
-                suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
+                # agent_type=AgentType.OPENAI_FUNCTIONS,
+                agent_executor_kwargs={
+                "suffix": "Always return a JSON dictionary that can be parsed into a data frame containing the requested information."
+                  },
+                # suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
                 verbose=True,
                 allow_dangerous_code=True
             )
@@ -739,8 +784,8 @@ def server(input, output, session: Session):
             data_analysis_agent = create_pandas_dataframe_agent(
                 llm, 
                 d, 
-                agent_type=AgentType.OPENAI_FUNCTIONS,
-                suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
+                # agent_type=AgentType.OPENAI_FUNCTIONS,
+                # suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
                 verbose=True,
                 allow_dangerous_code=True
             )
@@ -773,8 +818,8 @@ def server(input, output, session: Session):
             data_analysis_agent = create_pandas_dataframe_agent(
                 llm, 
                 d, 
-                agent_type=AgentType.OPENAI_FUNCTIONS,
-                suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
+                # agent_type=AgentType.OPENAI_FUNCTIONS,
+                # suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
                 verbose=True,
                 allow_dangerous_code=True
             )
@@ -813,8 +858,8 @@ def server(input, output, session: Session):
             data_analysis_agent = create_pandas_dataframe_agent(
                 llm, 
                 d, 
-                agent_type=AgentType.OPENAI_FUNCTIONS,
-                suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
+                # agent_type=AgentType.OPENAI_FUNCTIONS,
+                # suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
                 verbose=True,
                 allow_dangerous_code=True
             )
@@ -845,8 +890,8 @@ def server(input, output, session: Session):
             data_analysis_agent = create_pandas_dataframe_agent(
                 llm, 
                 d, 
-                agent_type=AgentType.OPENAI_FUNCTIONS,
-                suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
+                # agent_type=AgentType.OPENAI_FUNCTIONS,
+                # suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
                 verbose=True,
                 allow_dangerous_code=True
             )
@@ -875,8 +920,8 @@ def server(input, output, session: Session):
             data_analysis_agent = create_pandas_dataframe_agent(
                 llm, 
                 d, 
-                agent_type=AgentType.OPENAI_FUNCTIONS,
-                suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
+                # agent_type=AgentType.OPENAI_FUNCTIONS,
+                # suffix="Always return a JSON dictionary that can be parsed into a data frame containing the requested information.",
                 verbose=True,
                 allow_dangerous_code=True
             )
@@ -921,17 +966,26 @@ def server(input, output, session: Session):
         
         # Get the temperature data for forecasting
         f = key_data[key_data['Site_Id'] == input.var_3()]
-        
+
+        model_selection = input.forecasting_model()
+       
         # Call the forecasting function
-        forecasting_data = forecasting_data_daily(temp_data=f,
-                                             )
-        
+
+        if model_selection == 'ARIMA':
+            forecasting_data = forecasting_data_daily(temp_data=f,
+                                                )
+            forecasting_data["Date"] = forecasting_data["Date"].dt.strftime('%Y-%m-%d')
+
+        elif model_selection == 'SARIMAX':
+            forecasting_data = forecasting_data_daily_sarimax(temp_data=f,
+                                                )    
+            forecasting_data["Date"] = forecasting_data["Date"].dt.strftime('%Y-%m-%d')
         # Create a plotly figure for the forecasted data
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
             x=forecasting_data['Date'],
-            y=forecasting_data['Value_mean'],
+            y=forecasting_data['Value'],
             mode='lines',
             name='Forecasted Temperature',
             line=dict(color='blue')
@@ -958,8 +1012,18 @@ def server(input, output, session: Session):
         fig.update_layout(title='Forecasted Daily Temperature',
                           xaxis_title='Date',
                           yaxis_title='Temperature (°C)',
-                          template='plotly_white')
+                          template='ggplot2')
 
         return fig
+    
+
+
+    # Define a callback to run when the user submits a message
+    # @chat.on_user_submit  
+    # async def handle_user_input(user_input: str):  
+    #     # Simply echo the user's input back to them
+    #     await chat.append_message(f"You said: {user_input}") 
+
+
 app = App(app_ui, server)
 

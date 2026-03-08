@@ -1,7 +1,7 @@
 
 requests
 
-logging
+# logging
 urllib3
 datetime
 numpy<2

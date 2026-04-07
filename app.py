@@ -36,23 +36,46 @@ from chatlas import ChatOllama
 from dotenv import load_dotenv
 from databricks.connect.session import DatabricksSession
 from pyspark.sql.functions import col
+from databricks import sql
 
 
+load_dotenv()
+print(os.environ.get('access_token '))
+connection = sql.connect(
+                        server_hostname = "dbc-e9c1c23a-4a99.cloud.databricks.com",
+                        http_path = "/sql/1.0/warehouses/b5b938028eb3a7f7",
+                        access_token = os.environ.get('access_token'))
 
-# load_dotenv()
+cursor = connection.cursor()
+cursor.execute("SELECT * FROM workspace.pollution_data.historical_obs_new")
+columns = [desc[0] for desc in cursor.description]
+analysis_data = pd.DataFrame(cursor.fetchall(), columns=columns)
+
+
+# def get_spark():
+#     raw_host = os.environ.get("DATABRICKS_HOST", "")
+#     # Remove https:// and any trailing slashes
+#     host = raw_host.replace("https://", "").strip("/")
+#     token = os.environ.get("DATABRICKS_TOKEN", "").strip()
+    
+#     # CRITICAL: No trailing semicolon at the very end of the string
+#     connection_string = f"sc://{host}:443/;token={token}"
+
+#     return DatabricksSession.builder.remote(connection_string).getOrCreate()
+
 
 # def get_spark():
 #     return DatabricksSession.builder.remote(
-#         host=os.getenv("DATABRICKS_HOST"),
-#         token=os.getenv("DATABRICKS_TOKEN")
+#         host=os.environ.get("DATABRICKS_HOST"),
+#         token=os.environ.get("DATABRICKS_TOKEN")
 #     ).serverless().getOrCreate()
 
 # spark = get_spark()
 
-spark = DatabricksSession.builder.serverless().getOrCreate()
-t = spark.read.table("workspace.pollution_data.historical_obs_new") 
+# spark = DatabricksSession.builder.serverless().getOrCreate()
+# t = spark.read.table("workspace.pollution_data.historical_obs_new") 
 
-analysis_data = t.toPandas()
+# analysis_data = t.toPandas()
 
 # analysis_data = pd.read_csv('HistoricalObs.csv', 
 #                    encoding = 'unicode_escape')
@@ -108,11 +131,11 @@ last_year_start = datetime(last_year, 1, 1)
 model = 'gpt-4o-mini'
 
 # Initialize the LLM
-# llm = ChatOpenAI(
-#     # model=model,
-#     # temperature=0,
-#     api_key =  os.getenv("OPENAI_API_KEY")
-# )
+llm = ChatOpenAI(
+    model=model,
+    # temperature=0,
+    api_key =  os.getenv("OPENAI_API_KEY")
+)
 
 
 chat = ChatOpenAI(

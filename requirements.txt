@@ -44,4 +44,6 @@ langsmith
 chatlas
 
 databricks-connect
+databricks-sql-connector
+databricks-cli
 python-dotenv

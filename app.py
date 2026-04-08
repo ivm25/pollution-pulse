@@ -134,14 +134,14 @@ model = 'gpt-4o-mini'
 llm = ChatOpenAI(
     model=model,
     # temperature=0,
-    api_key =  os.getenv("OPENAI_API_KEY")
+    api_key =  os.environ.get('OPENAI_API_KEY')
 )
 
 
 chat = ChatOpenAI(
     # model=model,
     # temperature=0,
-    api_key =  os.getenv("OPENAI_API_KEY")
+    api_key =  os.environ.get('OPENAI_API_KEY')
 )
 
 

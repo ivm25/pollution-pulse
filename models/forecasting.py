@@ -30,13 +30,13 @@ from databricks import sql
 
 # analysis_data = t.toPandas()
 
-analysis_data = pd.read_csv('HistoricalObs.csv', 
-                   encoding = 'unicode_escape')
+# analysis_data = pd.read_csv('HistoricalObs.csv', 
+#                    encoding = 'unicode_escape')
 
-analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
+# analysis_data['Date'] = pd.to_datetime(analysis_data['Date'])
 
 
-key_data = analysis_data[analysis_data['Parameter_ParameterDescription'] == 'Temperature']
+# key_data = analysis_data[analysis_data['Parameter_ParameterDescription'] == 'Temperature']
 
 
 
